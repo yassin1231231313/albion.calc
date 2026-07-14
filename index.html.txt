@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Albion Market Matrix</title>
+    <!-- Tailwind CSS for modern dark UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #111217; color: #e2e8f0; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1c24; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    </style>
+</head>
+<body class="p-6 font-sans">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- HEADER -->
+        <header class="mb-8 border-b border-gray-800 pb-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-amber-500 tracking-wide">Albion Market Matrix</h1>
+                <p class="text-gray-400 text-sm mt-1">Grid-based crafting calculations powered by Albion Online Data Project.</p>
+            </div>
+            <!-- Toggle Mode (Cost vs Profit) -->
+            <div class="flex bg-[#1a1c24] border border-gray-800 rounded-lg p-1.5">
+                <button onclick="setDisplayMode('profit')" id="btn-profit" class="px-4 py-1.5 text-xs font-bold rounded-md bg-amber-600 text-white transition-all">
+                    Show Net Profit
+                </button>
+                <button onclick="setDisplayMode('cost')" id="btn-cost" class="px-4 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition-all">
+                    Show Crafting Cost
+                </button>
+            </div>
+        </header>
+
+        <!-- SETTINGS PANEL -->
+        <section class="bg-[#1a1c24] border border-gray-800 rounded-lg p-6 mb-8 grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Location Bonus</label>
+                <select id="rrrSelect" class="w-full bg-[#252836] border border-gray-700 text-white rounded p-2 focus:outline-none focus:border-amber-500">
+                    <option value="0.152">City (15.2% Return)</option>
+                    <option value="0.0">Islands/No Bonus (0% Return)</option>
+                    <option value="0.248">Brecilien (24.8% Return)</option>
+                    <option value="0.358">Black Zone Territory (35.8% Return)</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Focus Activity</label>
+                <div class="flex items-center h-10">
+                    <input type="checkbox" id="useFocus" class="w-5 h-5 text-amber-500 bg-[#252836] border-gray-700 rounded focus:ring-0">
+                    <label for="useFocus" class="ml-2 text-sm text-gray-300 font-medium">Use Focus (+47.9%)</label>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Market City</label>
+                <select id="marketCity" class="w-full bg-[#252836] border border-gray-700 text-white rounded p-2 focus:outline-none focus:border-amber-500">
+                    <option value="Lymhurst">Lymhurst</option>
+                    <option value="Thetford">Thetford</option>
+                    <option value="Fort Sterling">Fort Sterling</option>
+                    <option value="Bridgewatch">Bridgewatch</option>
+                    <option value="Martlock">Martlock</option>
+                    <option value="Caerleon">Caerleon</option>
+                    <option value="Brecilien">Brecilien</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Station Fee (per 100 nut.)</label>
+                <input type="number" id="stationFee" value="500" class="w-full bg-[#252836] border border-gray-700 text-white rounded p-2 focus:outline-none focus:border-amber-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Server</label>
+                <select id="serverSelect" class="w-full bg-[#252836] border border-gray-700 text-white rounded p-2 focus:outline-none focus:border-amber-500">
+                    <option value="europe">Europe (EU)</option>
+                    <option value="west">Americas (West)</option>
+                    <option value="east">Asia (East)</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- ACTION BUTTON -->
+        <div class="mb-8 flex justify-end">
+            <button onclick="fetchAndCalculate()" class="w-full md:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2">
+                🔄 Load Market Data
+            </button>
+        </div>
+
+        <!-- MATRIX CARDS CONTAINER -->
+        <div id="cardsContainer" class="space-y-6">
+            <div class="bg-[#1a1c24] border border-gray-800 rounded-lg p-12 text-center text-gray-500">
+                Click "Load Market Data" to pull live prices and build your calculation tables.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Templates
+        const CRAFT_TEMPLATES = [
+            { baseId: "MAIN_BOW", name: "Bow", nutrition: 180, recipe: { wood: 32 } },
+            { baseId: "MAIN_SWORD", name: "Broadsword", nutrition: 180, recipe: { metal: 16, leather: 8 } },
+            { baseId: "MAIN_SPEAR", name: "Spear", nutrition: 180, recipe: { wood: 8, metal: 16 } },
+            { baseId: "HEAD_PLATE_SET1", name: "Soldier Helmet", nutrition: 90, recipe: { metal: 4 } },
+            { baseId: "ARMOR_PLATE_SET1", name: "Soldier Armor", nutrition: 180, recipe: { metal: 16 } },
+            { baseId: "SHOES_PLATE_SET1", name: "Soldier Boots", nutrition: 90, recipe: { metal: 4 } },
+            { baseId: "CAPE", name: "Regular Cape", nutrition: 45, recipe: { cloth: 4, leather: 4 } }
+        ];
+
+        let currentDisplayMode = "profit"; // 'profit' or 'cost'
+        let cachedPrices = null;
+
+        function setDisplayMode(mode) {
+            currentDisplayMode = mode;
+            const btnProfit = document.getElementById("btn-profit");
+            const btnCost = document.getElementById("btn-cost");
+
+            if (mode === "profit") {
+                btnProfit.className = "px-4 py-1.5 text-xs font-bold rounded-md bg-amber-600 text-white transition-all";
+                btnCost.className = "px-4 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition-all";
+            } else {
+                btnCost.className = "px-4 py-1.5 text-xs font-bold rounded-md bg-amber-600 text-white transition-all";
+                btnProfit.className = "px-4 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition-all";
+            }
+
+            if (cachedPrices) {
+                renderGrid(cachedPrices);
+            }
+        }
+
+        function getMaterialId(matType, tier, ench) {
+            const prefix = `T${tier}_`;
+            let suffix = "";
+            if (matType === "wood") suffix = "PLANKS";
+            if (matType === "metal") suffix = "METALBAR";
+            if (matType === "leather") suffix = "LEATHER";
+            if (matType === "cloth") suffix = "CLOTH";
+            
+            const baseMat = prefix + suffix;
+            return ench > 0 ? `${baseMat}_LEVEL${ench}` : baseMat;
+        }
+
+        async function fetchAndCalculate() {
+            const server = document.getElementById("serverSelect").value;
+            const targetCity = document.getElementById("marketCity").value;
+
+            const idsToFetch = new Set();
+
+            // Populate all raw items and materials we need from the API
+            CRAFT_TEMPLATES.forEach(item => {
+                for (let tier = 4; tier <= 8; tier++) {
+                    for (let ench = 0; ench <= 3; ench++) {
+                        const baseItemId = `T${tier}_${item.baseId}`;
+                        const productId = ench > 0 ? `${baseItemId}@${ench}` : baseItemId;
+                        idsToFetch.add(productId);
+
+                        Object.keys(item.recipe).forEach(matType => {
+                            idsToFetch.add(getMaterialId(matType, tier, ench));
+                        });
+                    }
+                }
+            });
+
+            const cardsContainer = document.getElementById("cardsContainer");
+            cardsContainer.innerHTML = `<div class="bg-[#1a1c24] border border-gray-800 rounded-lg p-12 text-center text-amber-500 animate-pulse font-medium">Fetching real-time market data matrix...</div>`;
+
+            const idsParam = Array.from(idsToFetch).join(",");
+            const apiUrl = `https://${server}.albion-online-data.com/api/v2/stats/prices/${idsParam}.json?locations=${targetCity}`;
+
+            try {
+                const response = await fetch(apiUrl);
+                const priceData = await response.json();
+
+                const priceMap = {};
+                priceData.forEach(p => {
+                    priceMap[p.item_id] = p.sell_price_min || p.buy_price_max || 0;
+                });
+
+                cachedPrices = priceMap;
+                renderGrid(priceMap);
+            } catch (err) {
+                cardsContainer.innerHTML = `<div class="bg-[#1a1c24] border border-gray-800 rounded-lg p-12 text-center text-red-500">Failed to connect to Albion pricing databases. Check your server settings and try again.</div>`;
+                console.error(err);
+            }
+        }
+
+        function renderGrid(priceMap) {
+            const rrr = parseFloat(document.getElementById("useFocus").checked ? 0.479 : document.getElementById("rrrSelect").value);
+            const fee = parseFloat(document.getElementById("stationFee").value) || 0;
+            const container = document.getElementById("cardsContainer");
+            container.innerHTML = "";
+
+            CRAFT_TEMPLATES.forEach(item => {
+                // Card wrapper
+                const card = document.createElement("div");
+                card.className = "bg-[#1a1c24] border border-gray-800 rounded-lg overflow-hidden flex flex-col lg:flex-row";
+
+                // Left Panel: Item visual
+                const displayImageId = `T8_${item.baseId}`;
+                const leftPanel = `
+                    <div class="lg:w-1/4 bg-[#15171e] p-6 flex flex-col justify-center items-center border-b lg:border-b-0 lg:border-r border-gray-800 text-center">
+                        <img class="w-24 h-24 rounded border border-gray-700 bg-[#1a1c24] shadow-md p-1" src="https://render.albiononline.com/v1/item/${displayImageId}.png" alt="" onerror="this.src='https://placehold.co/96x96/252836/ffffff?text=${item.name}'">
+                        <h3 class="text-lg font-bold text-amber-500 mt-4">${item.name}</h3>
+                        <p class="text-xs text-gray-500 mt-1 uppercase tracking-wider">Base Ingredients: ${Object.keys(item.recipe).map(k => `${item.recipe[k]} ${k}`).join(', ')}</p>
+                    </div>
+                `;
+
+                // Right Panel: Data Matrix Grid Table
+                let tableRows = "";
+                for (let tier = 4; tier <= 8; tier++) {
+                    let cellData = [];
+                    for (let ench = 0; ench <= 3; ench++) {
+                        const baseItemId = `T${tier}_${item.baseId}`;
+                        const productId = ench > 0 ? `${baseItemId}@${ench}` : baseItemId;
+
+                        // Calculating Crafting Cost
+                        let ingredientCost = 0;
+                        let missingPrice = false;
+                        Object.keys(item.recipe).forEach(matType => {
+                            const matId = getMaterialId(matType, tier, ench);
+                            const price = priceMap[matId] || 0;
+                            if (price === 0) missingPrice = true;
+                            ingredientCost += (item.recipe[matType] * (1 - rrr)) * price;
+                        });
+
+                        const stationCost = (item.nutrition / 100) * fee;
+                        const totalCost = Math.round(ingredientCost + stationCost);
+                        const marketPrice = priceMap[productId] || 0;
+
+                        // Calculating Net Profit (4% market deduction included)
+                        const profit = marketPrice > 0 ? Math.round(marketPrice - totalCost - (marketPrice * 0.04)) : 0;
+
+                        // Cell presentation logic
+                        let displayValue = "-";
+                        let styleClass = "text-gray-500";
+
+                        if (!missingPrice) {
+                            if (currentDisplayMode === "profit") {
+                                if (marketPrice > 0) {
+                                    displayValue = `${profit > 0 ? '+' : ''}${profit.toLocaleString()}`;
+                                    styleClass = profit > 0 ? "text-green-400 font-bold" : "text-red-400";
+                                } else {
+                                    displayValue = "No listings";
+                                    styleClass = "text-gray-600 text-xs";
+                                }
+                            } else {
+                                displayValue = `${totalCost.toLocaleString()}`;
+                                styleClass = "text-gray-300 font-mono";
+                            }
+                        } else {
+                            displayValue = "No price logs";
+                            styleClass = "text-amber-500/60 text-xs font-sans";
+                        }
+
+                        cellData.push(`<td class="px-4 py-3 text-center border-r border-gray-800/40 last:border-0 ${styleClass}">${displayValue}</td>`);
+                    }
+
+                    tableRows += `
+                        <tr class="hover:bg-[#20222d] transition-colors border-b border-gray-800 last:border-0">
+                            <td class="px-6 py-3 font-bold text-gray-400 font-mono text-sm bg-[#15171e]/50 border-r border-gray-800">Tier ${tier}</td>
+                            ${cellData.join('')}
+                        </tr>
+                    `;
+                }
+
+                const rightPanel = `
+                    <div class="flex-1 overflow-x-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-[#15171e] border-b border-gray-800">
+                                    <th class="px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider w-24">Tier</th>
+                                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Enchantment 0</th>
+                                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Enchantment 1</th>
+                                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Enchantment 2</th>
+                                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Enchantment 3</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                card.innerHTML = leftPanel + rightPanel;
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
